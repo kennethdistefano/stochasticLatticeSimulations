@@ -6,6 +6,17 @@ PURPOSE:
         rectangular lattice to investigate the effects of the stable region on a 
         varying size unstable region (non-homogeneous LV model)
 
+    - UPDATE (Apr 24, 2025):
+        - it is now possible to close off the two regions => system can no longer 
+            be diffusively coupled
+            - created const int variable OPEN_SYSTEM_TRIGGER
+            - created 1d bool array w/n main*.cpp: open_system_arr[]
+            - created function get_environment()
+            ~ modified functions reaction_direction(), 
+
+    ~ UPDATE (June 17, 2025):
+        ~ include more command line arguments for easier parameter sweeps
+
 
     - simulate reaction-diffusion processes on a 2d lattice
         - specifically predator-prey lotka-volterra model
@@ -15,7 +26,19 @@ PURPOSE:
 UPDATES FROM PREVIOUS VERSION (v9):
     - 
     - new functions:
-        - 
+        - Apr 24, 2025: get_environment()
+            - passes int OPEN_SYSTEM_TRIGGER to determine when to close the two 
+                regions from each other for inhomogeneous system
+            - passes array of type bool by reference so it can be modified
+                - arr[MCS] = [true, true, ..., false, false,...]
+            - main idea is to first let a transient predator-prey wavefront enter 
+                vulnerable region after total extinction to see if vulnerable region 
+                is sustained
+            - July 4, 2025:
+                - found a bug w/n for-loop bounds
+                    - changed for-loop bounds from [0,NUM_STEPS) to [0,NUM_STEPS]
+                    - on the final step, the interface because open when it was 
+                        supposed to be closed causing particles to enter into the vulnerable region on the final time step
     - depreciated functions:
         - 
     - modified functions:
@@ -65,6 +88,8 @@ UPDATES FROM PREVIOUS VERSION (v9):
                 function from Site.cpp. so i just rewrote it s.t. I use the 
                 insertion operator as I originially intended
                     - cout << lattice[i][j]; ==> (A,B;K)
+            - Apr 24, 2025: changed type ofstream to ostream to account for passed 
+                argument to be cout
         
         - find_Site()
             - now passes lat[][LCOL] instead of lat[][L]
@@ -74,15 +99,32 @@ UPDATES FROM PREVIOUS VERSION (v9):
         
         - output_num_density()
             - now passes lat[][LCOL] instead of lat[][L]
+            - Apr 24, 2025: changed type ofstream to ostream to account for passed 
+                argument to be cout
 
         - get_ofname()
             - naming convention now considered rectangular lattice
+            - Apr 25, 2025: now denotes OPEN_SYSTEM_TRIGGER w/n output file name
+            - July 28, 2025: no longer includes seed within output file name (too 
+                long and obnoxious)
+                - removed passed argument runSeed within function call
 
         - get_nn()
             - now considers rectangular lattice: L --> LCOL 
 
         - print_initial_conditions()
             - updated with ternary operator if LROW==LCOL
+            - April 28, 2025: now outputs OPEN_SYSTEM_TRIGGER range
+
+        - reaction_direction()
+            - Apr 24, 2025
+            - includes two more passing arguments: randommly picked site index and 
+                environment state (open or closed)
+            - now checks if environment is closed and if site index is near interface
+                - if so it randomly choses between up, down, horizontal
+                    - then chooses left or right depending on site w.r.t. interface
+                    - NOTE: probability appears to leak out because horizontal is 
+                        being chosen more often than not
         
     -notes:
         - within reaction_hop(), reaction types SAM and MAM, may not reflect the 
@@ -139,6 +181,7 @@ random_device rd;                   // non-deterministic generator
 int sim_seed = rd();                // generated deterministic seed
 mt19937 mt_gen;                     // URNG engine typedef
 vector<int> avail_rand_sites;       // vector, indicies of occupied sites
+bool open_system_arr[NUM_STEPS+1];  // 1d bool array; system is open/closed at time t
 
 /* -------------------------- main ---------------------- */
 int main(int argc, char *argv[])
@@ -153,7 +196,7 @@ int main(int argc, char *argv[])
     print_initial_conditions(sim_seed, argv[1]);
 
     // create output file name
-    get_ofname(numDenName, latConfigName, sim_seed, argv[1]);
+    get_ofname(numDenName, latConfigName, argv[1]);
     
     // open output data files
     ave_out.open(numDenName);
@@ -173,6 +216,9 @@ int main(int argc, char *argv[])
 
     // sanity check: print num den of each species to screen; compare to N_i
     check_num_density(lattice);
+
+    // initialize array to keep track if environment is open or closed
+    get_environment(open_system_arr, OPEN_SYSTEM_TRIGGER);
     
     // this loop begins at 1 to avoid miscalculating num_densities[0]
     for(int ti=1; ti<=NUM_STEPS; ti++)
@@ -190,7 +236,7 @@ int main(int argc, char *argv[])
             si_index = find_Site(lattice, avail_rand_sites, randP);
             
             // determine right or left reaction
-            direction = reaction_direction(mt_gen);
+            direction = reaction_direction(mt_gen, open_system_arr[ti], si_index);
 
             // react
             reaction_hop(lattice, si_index, direction, mt_gen);

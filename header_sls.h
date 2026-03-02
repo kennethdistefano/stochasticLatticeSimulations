@@ -11,29 +11,32 @@
 using namespace std;
 
 /* -------------------------- global constants ---------------------- */
-const int LROW = 18;                            // total vertical side length
-const int LCOL_UNSTABLE = 26;                    // horiz. side len of unstable area
+const int LROW = 200;							// total vertical length
+const int LCOL_UNSTABLE = 100;				// horiz. len of unstable area
 const int LCOL = LROW/2 + LCOL_UNSTABLE;        // total horizontal side length
 const int SITES = LROW*LCOL;                    // total # of sites on 2-d lattice
-const int K = 1;                                // uniform carrying capacity K =/= -1
+const int K = 3;								// uniform carrying capacity K =/= -1
 const int K_LOW = 1;
 const int K_HIGH = 3;
-const int N_A = 200;                            // init num of particles for A
-const int N_B = 200;                            // init num of particles for B
+const int N_A = 36000;                            // init num of particles for A
+const int N_B = 36000;                            // init num of particles for B
 // const int N_C = 25;                             // init num of particles for C
 // const int N_D = 5;                              // init num of particles for D
 const int N_i[NUM_SPECIES] = {N_A, N_B};
 // const int N_i[NUM_SPECIES] = {N_A};
 // const int N_i[NUM_SPECIES] = {N_A, N_B, N_C};
-const int NUM_STEPS = 500;                 // number of time steps to simulate
+const int NUM_STEPS = 2000;                 // number of time steps to simulate
 const string INIT_TYPE = "random";          // how to initialize chain
 const string REACTION_TYPE = "LV";          // kind of reaction, "MAM", "LV", etc.
-const string CARRY_CAP_TYPE = "half";    // kind of carrying capacity 
+const string CARRY_CAP_TYPE = "uniform";    // kind of carrying capacity
 const float MAM_PROB = .4;
 const float MU = .1;                        // spontaneous predator death prob.
 const float SIGMA = .2;                     // prey birth prob.
-const float LAMBDA = .9;                   // predation prob.
-const bool MAKE_MOVIE = true;
+const float LAMBDA = 0.0;						// predation prob.
+const bool MAKE_MOVIE = false;              // output to "lat_config_*.dat" data file
+
+// the time at which the inhomogeneous system is no longer diffusively coupled
+const int OPEN_SYSTEM_TRIGGER = CARRY_CAP_TYPE=="uniform" ? NUM_STEPS : 200;
 
 /* -------------------------- prototypes ---------------------- */
 // desc: generate a random integer between min and max
@@ -63,7 +66,7 @@ void get_avail_rand_sites(const Site lat[][LCOL],
 // desc: 
 // pre: 
 // post:
-void get_ofname(string & rho,string & lat,const int runSeed,const string runID);
+void get_ofname(string & rho, string & lat, const string runID);
 
 // desc: function for testing to print to screen contents of 1d Site array
 // pre: Site array, arr_length= side length of lattice, string array name
@@ -94,7 +97,7 @@ void reaction_hop(Site lat[][LCOL], const int site_index, const string direction
 // desc: 
 // pre: 
 // post: 
-string reaction_direction(mt19937 & mt);
+string reaction_direction(mt19937 & mt, const bool env, const int siteIndex);
 
 // desc: determine the index of nearest neighbor
 // pre: siIndex is an int within the range [0, SITES-1)
@@ -150,7 +153,7 @@ int get_total_lattice_pop(const Site lat[][LCOL]);
 void print_lattice_pop(const Site lat[][LCOL]);
 
 // desc: function to output the current lattice configuration a specific/uniform way
-void output_lattice_config(ofstream & out, Site lat[][LCOL], const int mcs);
+void output_lattice_config(ostream & out, Site lat[][LCOL], const int mcs);
 
 // desc: function to determine which Site the randomly picked particle is located
 int find_Site(const Site lat[][LCOL],const vector<int> & vec,const int randParticle);
@@ -160,7 +163,13 @@ int find_Site(const Site lat[][LCOL],const vector<int> & vec,const int randParti
 // post: the array, pops[], returns with the values of the total population of each 
 //          species regardless of CARRY_CAP_TYPE because the number of attempted 
 //          reactions depend of the total number of particles w/n the system.
-void output_num_density(ofstream & out, Site lat[][LCOL], int pops[], const int mcs);
+void output_num_density(ostream & out, Site lat[][LCOL], int pops[], const int mcs);
+
+// desc: modifies boolArr[] of type bool and of length NUM_STEPS+1 b/c passed by 
+//      reference. Index of boolArr[] corresponds to a particular time t. Each 
+//      element of boolArr will be either true or false denoting if the system is 
+//      either open or closed at that particular time. 
+void get_environment(bool boolArr[], const int trigger);
 
 
 

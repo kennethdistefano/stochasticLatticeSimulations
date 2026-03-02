@@ -272,7 +272,7 @@ void get_avail_rand_sites(const Site lat[][LCOL],
 }
 
 // function to return the name of the output file for the average number density
-void get_ofname(string & rho,string & lat,const int runSeed,const string runID){
+void get_ofname(string & rho, string & lat, const string runID){
     // local vars
     string run_info, Ktype;
 
@@ -298,8 +298,9 @@ void get_ofname(string & rho,string & lat,const int runSeed,const string runID){
     // create string with simulation details
     run_info = "species"+to_string(NUM_SPECIES)+"_L"
                 +(LROW==LCOL ? to_string(LROW) : to_string(LROW)+"-"+to_string(LCOL))
-                +"_steps"+to_string(NUM_STEPS)+"_Na"+to_string(N_A)
-                + Ktype+"_seed"+to_string(runSeed)+"_id"+runID+".dat";
+                +"_steps"+to_string(NUM_STEPS) + "_Na" + to_string(N_A) + Ktype
+                +(CARRY_CAP_TYPE=="uniform"?"":"_ost"+to_string(OPEN_SYSTEM_TRIGGER))
+                +"_id"+runID+".dat";
     
     // create output file name for the number density of each run
     rho = "num_density_" + run_info;
@@ -339,7 +340,7 @@ void print_int_vector(const vector<int> & vec, const string vecName){
     return;
 }
 
-// function to print current status of the loop
+// testing function to print current status of the loop
 void print_loop_status(const string index_label, const int index,
                         const string num_tabs, const string loop_type)
 {
@@ -350,7 +351,7 @@ void print_loop_status(const string index_label, const int index,
     return;
 }
 
-// test function to print line of dashes
+// testing function to print line of dashes
 void print_dashes(){
     cout << "-----------------------------------------------------------"<<endl;
     return;
@@ -632,28 +633,104 @@ void reaction_hop(Site lat[][LCOL], const int site_index, const string direction
 }
 
 // function to return with direction particle will hop and react
-string reaction_direction(mt19937 & mt)
+string reaction_direction(mt19937 & mt, const bool env, const int siteIndex)
 {
     // local vars
     string dir;
-    int rand_int = gen_rand_int(0, 99, mt);
+    int col = siteIndex%LCOL;
+    double rand_double = gen_rand_double(mt);
 
-    // react to the left
-    if(rand_int < 25){
-        dir = "left";
+    // true if environment is closed and if chosen site is near interface
+    if(!env && (col==0 || col==LROW/2-1 || col==LROW/2 || col==LCOL-1)){
+        // react up
+        if(rand_double < 0.33333333){
+            dir = "up";
+        }
+        // react down
+        else if(rand_double >= 0.33333333 && rand_double < 0.66666666){
+            dir = "down";
+        }
+        // react horizontally -> left or right -> depends on interface
+        else{
+            // can't hop left
+            if(col==0 || col== LROW/2){
+                dir = "right";
+            }
+            else{
+                dir = "left";
+            }
+        }
     }
-    // react to the right
-    else if(rand_int >= 25 && rand_int < 50){
-        dir = "right";
-    }
-    // react up
-    else if(rand_int >= 50 && rand_int < 75){
-        dir = "up";
-    }
-    // react down
+
+    // pick reaction direction normally
     else{
-        dir = "down";
+        // react to the left
+        if(rand_double < 0.25){
+            dir = "left";
+        }
+        // react to the right
+        else if(rand_double >= 0.25 && rand_double < 0.5){
+            dir = "right";
+        }
+        // react up
+        else if(rand_double >= 0.5 && rand_double < 0.75){
+            dir = "up";
+        }
+        // react down
+        else{
+            dir = "down";
+        }
+
     }
+    
+    // // diffusively coupled environment
+    // if(env){
+    //     int rand_int = gen_rand_int(0, 99, mt);
+
+    //     // react to the left
+    //     if(rand_int < 25){
+    //         dir = "left";
+    //     }
+    //     // react to the right
+    //     else if(rand_int >= 25 && rand_int < 50){
+    //         dir = "right";
+    //     }
+    //     // react up
+    //     else if(rand_int >= 50 && rand_int < 75){
+    //         dir = "up";
+    //     }
+    //     // react down
+    //     else{
+    //         dir = "down";
+    //     }
+    // }
+
+    // // closed environment --> diffusively uncoupled
+    // else{
+    //     // determine column number from site index
+    //     int col = siteIndex % LCOL;
+
+    //     // determine if chosen site is near interface boundary of the two regions
+    //     if(col == 0){
+    //         // first col: can only interact with up, down, right
+    //     }
+
+    //     // left side of interface, KLOW region: can only interact with up, down, left
+    //     else if(col == (LROW/2)-1){
+            
+    //     }
+
+    //     // right side of interface, in KHIGH: can only interact with up, down, right
+    //     else if(col == LROW/2){
+
+    //     }
+        
+    //     // last col of lattice: : can only interact with up, down, left
+    //     else if(col == LCOL-1){
+
+    //     }
+
+    // }
 
     return dir;
 }
@@ -814,7 +891,8 @@ void print_initial_conditions(const int currentSeed, const string runID){
             << NUM_STEPS << " mcs, "
             << INIT_TYPE << " intitalization, "
             << REACTION_TYPE << " reaction, "
-            << "mu= " << MU << ", sigma= " << SIGMA << ", lambda= " << LAMBDA<< endl;
+            << "mu= " << MU << ", sigma= " << SIGMA << ", lambda= " << LAMBDA
+            << ", open system for t in [0," << OPEN_SYSTEM_TRIGGER << "]" << endl;
     
     print_1d_int_array(N_i, NUM_SPECIES, "N_i");
     return;
@@ -943,7 +1021,7 @@ void print_lattice_pop(const Site lat[][LCOL]){
 }
 
 // function to print current lattice configuration to screen
-void output_lattice_config(ofstream & out, Site lat[][LCOL], const int mcs){
+void output_lattice_config(ostream & out, Site lat[][LCOL], const int mcs){
     // output current run and current Monte Carlo timestep
     out << "# mcs= " << mcs << endl;
 
@@ -984,7 +1062,7 @@ int find_Site(const Site lat[][LCOL],const vector<int> & vec,const int randParti
     return Site_index;
 }
 
-void output_num_density(ofstream & out, Site lat[][LCOL], int pops[], const int mcs){
+void output_num_density(ostream & out, Site lat[][LCOL], int pops[], const int mcs){
     
     // output time step to file
     out << mcs << "\t";
@@ -1028,6 +1106,20 @@ void output_num_density(ofstream & out, Site lat[][LCOL], int pops[], const int 
 
     // row finished, begin new line
     out << endl;
+
+    return;
+}
+
+void get_environment(bool boolArr[], const int trigger){
+    /*
+    NOTE: 
+        - boolArr[] is of len NUM_STEPS+1 to account for t=0 & t=NUM_STEPS inclusive
+    */
+   
+    // loop through number of time steps
+    for(int t=0; t<=NUM_STEPS; t++){
+        boolArr[t] = (t <= trigger) ? true : false;
+    }
 
     return;
 }
